@@ -1,17 +1,6 @@
 ; ============================================================
 ;  VacationMailManager.au3
 ;  Gestionnaire de Retour de Vacances — Boite Mail Outlook
-; ------------------------------------------------------------
-;  Fonctionnalites :
-;    · Connexion automatique a Outlook via COM
-;    · Scan des mails sur une plage de dates choisie
-;    · Detection RE / FW / TR et reconstitution des threads
-;    · Detection des pieces jointes
-;    · Groupement libre par projet / dossier
-;    · Creation des dossiers Outlook + deplacement des mails
-; ------------------------------------------------------------
-;  Prerequis : Microsoft Outlook installe + compte configure
-;  Teste sur  : Windows 10 / 11  ·  Outlook 2016-2021-365
 ; ============================================================
 
 #NoTrayIcon
@@ -38,21 +27,21 @@ Opt("TrayAutoPause",   0)
 Opt("MustDeclareVars", 0)
 
 ; ============================================================
-;  THEME — clair, epure, professionnel
+;  THEME
 ; ============================================================
-Global Const $C_BG       = 0xF3F6FB   ; Fond fenetre (bleu-gris tres clair)
-Global Const $C_WHITE    = 0xFFFFFF   ; Blanc pur — cards
-Global Const $C_BORDER   = 0xDDE3ED   ; Bordures legeres
-Global Const $C_ACCENT   = 0x2D6EE8   ; Bleu accent
-Global Const $C_GREEN    = 0x1A7F37   ; Vert succes
-Global Const $C_ORANGE   = 0x9A6700   ; Orange avertissement
-Global Const $C_RED      = 0xCF222E   ; Rouge erreur
-Global Const $C_TEXT     = 0x1F2328   ; Texte principal
-Global Const $C_MUTED    = 0x656D76   ; Texte secondaire
-Global Const $C_DIM      = 0x9198A1   ; Texte tres discret
+Global Const $C_BG       = 0xF3F6FB
+Global Const $C_WHITE    = 0xFFFFFF
+Global Const $C_BORDER   = 0xDDE3ED
+Global Const $C_ACCENT   = 0x2D6EE8
+Global Const $C_GREEN    = 0x1A7F37
+Global Const $C_ORANGE   = 0x9A6700
+Global Const $C_RED      = 0xCF222E
+Global Const $C_TEXT     = 0x1F2328
+Global Const $C_MUTED    = 0x656D76
+Global Const $C_DIM      = 0x9198A1
 
 ; ============================================================
-;  INDICES COLONNES — tableaux de donnees
+;  INDICES COLONNES
 ; ============================================================
 Global Const $MI_ENTRY  = 0
 Global Const $MI_SUBJ   = 1
@@ -106,7 +95,7 @@ Global $g_nQueue = 0
 Global $g_hWin, $g_hTab, $g_hTabH
 
 ; Page 1
-Global $h_BtnConnect, $h_LblStatus, $h_LblInbox
+Global $h_BtnConnect, $h_LblStatus, $h_LblInbox, $h_CbxMailbox
 Global $h_DtDeb, $h_DtFin
 Global $h_BtnScan, $h_PrgScan, $h_LblPrg, $h_EditLog
 
@@ -139,7 +128,7 @@ Func _BuildGUI()
     GUISetBkColor($C_BG)
     GUISetOnEvent($GUI_EVENT_CLOSE, "_OnClose")
 
-    ; ── Bandeau titre ────────────────────────────────────────
+    ; Bandeau titre
     GUICtrlCreateLabel("", 0, 0, 1020, 54)
     GUICtrlSetBkColor(-1, $C_WHITE)
 
@@ -153,11 +142,9 @@ Func _BuildGUI()
     GUICtrlSetColor(-1, $C_MUTED)
     GUICtrlSetFont(-1, 9, 400, 0, "Segoe UI")
 
-    ; Separateur
     GUICtrlCreateLabel("", 0, 54, 1020, 1)
     GUICtrlSetBkColor(-1, $C_BORDER)
 
-    ; ── Onglets ──────────────────────────────────────────────
     $g_hTab = GUICtrlCreateTab(0, 55, 1020, 631)
     GUICtrlSetBkColor($g_hTab, $C_BG)
     GUICtrlSetColor($g_hTab, $C_TEXT)
@@ -177,8 +164,8 @@ Func _BuildPage1()
     GUICtrlCreateTabItem("   Etape 1  —  Configuration & Scan   ")
     Local $x = 20, $y = 90, $w = 980
 
-    ; Card Connexion
-    _Card($x, $y, $w, 90)
+    ; Card Connexion — hauteur 118 pour inclure le selecteur de boite
+    _Card($x, $y, $w, 118)
     _Lbl("CONNEXION OUTLOOK", $x+16, $y+14, 300, $C_DIM, 7, 700)
     _Lbl("Statut :", $x+16, $y+36, 70, $C_MUTED, 9, 400)
 
@@ -191,14 +178,20 @@ Func _BuildPage1()
     GUICtrlSetFont($h_BtnConnect, 9, 700, 0, "Segoe UI")
     GUICtrlSetOnEvent($h_BtnConnect, "_OnConnect")
 
-    _Lbl("Boite :", $x+16, $y+62, 70, $C_MUTED, 9, 400)
-    $h_LblInbox = GUICtrlCreateLabel("—", $x+90, $y+62, 720, 18)
+    _Lbl("Boite a analyser :", $x+16, $y+64, 130, $C_MUTED, 9, 400)
+
+    ; ComboBox pour selectionner quelle boite Outlook analyser
+    $h_CbxMailbox = GUICtrlCreateCombo("(connectez Outlook d'abord)", $x+150, $y+60, $w-330, 24, BitOR($CBS_DROPDOWNLIST, $WS_VSCROLL))
+    GUICtrlSetFont($h_CbxMailbox, 9, 400, 0, "Segoe UI")
+    GUICtrlSetState($h_CbxMailbox, $GUI_DISABLE)
+
+    $h_LblInbox = GUICtrlCreateLabel("", $x+16, $y+96, $w-32, 16)
     GUICtrlSetBkColor($h_LblInbox, $C_WHITE)
-    GUICtrlSetColor($h_LblInbox, $C_TEXT)
-    GUICtrlSetFont($h_LblInbox, 9, 400, 0, "Segoe UI")
+    GUICtrlSetColor($h_LblInbox, $C_DIM)
+    GUICtrlSetFont($h_LblInbox, 8, 400, 0, "Segoe UI")
 
     ; Card Periode
-    Local $y2 = $y + 108
+    Local $y2 = $y + 136
     _Card($x, $y2, $w, 82)
     _Lbl("PERIODE DE VACANCES A ANALYSER", $x+16, $y2+14, 400, $C_DIM, 7, 700)
 
@@ -218,7 +211,7 @@ Func _BuildPage1()
 
     ; Card Journal
     Local $y3 = $y2 + 100
-    _Card($x, $y3, $w, 292)
+    _Card($x, $y3, $w, 262)
     _Lbl("JOURNAL DE SCAN", $x+16, $y3+14, 300, $C_DIM, 7, 700)
 
     $h_PrgScan = GUICtrlCreateProgress($x+16, $y3+32, $w-32, 7, $PBS_SMOOTH)
@@ -228,7 +221,7 @@ Func _BuildPage1()
     GUICtrlSetColor($h_LblPrg, $C_MUTED)
     GUICtrlSetFont($h_LblPrg, 8, 400, 0, "Segoe UI")
 
-    $h_EditLog = GUICtrlCreateEdit("", $x+16, $y3+68, $w-32, 204, _
+    $h_EditLog = GUICtrlCreateEdit("", $x+16, $y3+68, $w-32, 170, _
         BitOR($ES_READONLY, $ES_MULTILINE, $WS_VSCROLL, $ES_AUTOVSCROLL))
     GUICtrlSetBkColor($h_EditLog, $C_BG)
     GUICtrlSetColor($h_EditLog, $C_MUTED)
@@ -236,10 +229,10 @@ Func _BuildPage1()
 
     _Log("Bienvenue dans VacationMailManager.")
     _Log("Etape 1 : Connectez Outlook (bouton en haut a droite).")
-    _Log("Etape 2 : Definissez la periode de vos vacances.")
-    _Log("Etape 3 : Cliquez 'Lancer le Scan'.")
+    _Log("Etape 2 : Selectionnez la boite mail a analyser.")
+    _Log("Etape 3 : Definissez la periode et lancez le scan.")
 
-    $h_BtnScan = GUICtrlCreateButton("Lancer le Scan", $x+$w-160, $y3+254, 144, 36)
+    $h_BtnScan = GUICtrlCreateButton("Lancer le Scan", $x+$w-160, $y3+222, 144, 36)
     GUICtrlSetFont($h_BtnScan, 10, 700, 0, "Segoe UI")
     GUICtrlSetOnEvent($h_BtnScan, "_OnScan")
     GUICtrlSetState($h_BtnScan, $GUI_DISABLE)
@@ -276,29 +269,33 @@ Func _BuildPage2()
     ; -- Droite : creation de groupes
     Local $xR = 648, $wR = 352
 
-    _Card($xR, $y, $wR, 192)
-    _Lbl("CREER UN DOSSIER PROJET", $xR+16, $y+14, 300, $C_DIM, 7, 700)
-    _Lbl("1.  Cochez les conversations liees a ce projet", $xR+16, $y+34, $wR-24, $C_MUTED, 9, 400)
-    _Lbl("2.  Donnez un nom au dossier Outlook cible",    $xR+16, $y+54, $wR-24, $C_MUTED, 9, 400)
-    _Lbl("3.  Cliquez 'Ajouter a la file'",               $xR+16, $y+74, $wR-24, $C_MUTED, 9, 400)
+    ; Card hauteur 220 (etait 192) — corrige le chevauchement bouton/input
+    _Card($xR, $y, $wR, 220)
+    _Lbl("ASSIGNER A UN DOSSIER", $xR+16, $y+14, 300, $C_DIM, 7, 700)
+    _Lbl("1.  Cochez les conversations liees a ce projet",        $xR+16, $y+34, $wR-24, $C_MUTED, 9, 400)
+    _Lbl("2.  Saisissez ou selectionnez un dossier Outlook",      $xR+16, $y+54, $wR-24, $C_MUTED, 9, 400)
+    _Lbl("3.  Cliquez 'Ajouter a la file'",                       $xR+16, $y+74, $wR-24, $C_MUTED, 9, 400)
+    _Lbl("    (les dossiers existants sont reutilises)",           $xR+16, $y+90, $wR-24, $C_DIM,   8, 400)
 
-    $h_LblNbSel = GUICtrlCreateLabel("0 conversation(s) cochee(s)", $xR+16, $y+102, $wR-24, 18)
+    $h_LblNbSel = GUICtrlCreateLabel("0 conversation(s) cochee(s)", $xR+16, $y+110, $wR-24, 18)
     GUICtrlSetBkColor($h_LblNbSel, $C_WHITE)
     GUICtrlSetColor($h_LblNbSel, $C_ORANGE)
     GUICtrlSetFont($h_LblNbSel, 9, 700, 0, "Segoe UI")
 
-    _Lbl("Nom du dossier :", $xR+16, $y+130, 120, $C_MUTED, 9, 400)
-    $h_InputName = GUICtrlCreateInput("", $xR+16, $y+150, $wR-32, 26, $ES_AUTOHSCROLL)
+    _Lbl("Dossier cible :", $xR+16, $y+136, 120, $C_MUTED, 9, 400)
+
+    ; ComboBox editable : liste les dossiers existants + permet de saisir un nouveau nom
+    $h_InputName = GUICtrlCreateCombo("", $xR+16, $y+153, $wR-32, 24, BitOR($CBS_DROPDOWN, $CBS_AUTOHSCROLL, $WS_VSCROLL))
     GUICtrlSetFont($h_InputName, 9, 400, 0, "Segoe UI")
     GUICtrlSetColor($h_InputName, $C_TEXT)
-    GUICtrlSetBkColor($h_InputName, $C_WHITE)
 
-    $h_BtnAdd = GUICtrlCreateButton("+ Ajouter a la file", $xR+16, $y+156, 155, 28)
+    ; Bouton place apres le combo (etait y+156 et chevauchait l'input a y+150)
+    $h_BtnAdd = GUICtrlCreateButton("+ Ajouter a la file", $xR+16, $y+185, 155, 28)
     GUICtrlSetFont($h_BtnAdd, 9, 700, 0, "Segoe UI")
     GUICtrlSetOnEvent($h_BtnAdd, "_OnAddGroup")
 
     ; File d'attente
-    Local $y2 = $y + 200
+    Local $y2 = $y + 228
     _Card($xR, $y2, $wR, 222)
     _Lbl("FILE DE TRAITEMENT", $xR+16, $y2+14, 280, $C_DIM, 7, 700)
 
@@ -333,9 +330,9 @@ Func _BuildPage3()
 
     _Card($x, $y, $w, 100)
     _Lbl("RECAPITULATIF", $x+16, $y+14, 300, $C_DIM, 7, 700)
-    _Lbl("Les dossiers seront crees dans votre boite de reception Outlook.",           $x+16, $y+34, 700, $C_MUTED, 9, 400)
-    _Lbl("Les conversations assignees seront deplacees dans leur dossier respectif.",  $x+16, $y+54, 700, $C_MUTED, 9, 400)
-    _Lbl("Cette operation est reversible manuellement dans Outlook.",                  $x+16, $y+74, 700, $C_DIM,   9, 400)
+    _Lbl("Les dossiers seront crees ou reutilises dans votre boite de reception Outlook.",      $x+16, $y+34, 700, $C_MUTED, 9, 400)
+    _Lbl("Les conversations assignees seront deplacees dans leur dossier respectif.",           $x+16, $y+54, 700, $C_MUTED, 9, 400)
+    _Lbl("Cette operation est reversible manuellement dans Outlook.",                           $x+16, $y+74, 700, $C_DIM,   9, 400)
 
     Local $y2 = $y + 118
     _Card($x, $y2, $w, 358)
@@ -368,7 +365,6 @@ EndFunc
 ;  HELPERS UI
 ; ============================================================
 Func _Card($x, $y, $w, $h)
-    ; Ombre simulee (bordure 1px)
     GUICtrlCreateLabel("", $x, $y, $w, $h)
     GUICtrlSetBkColor(-1, $C_BORDER)
     GUICtrlCreateLabel("", $x, $y, $w-1, $h-1)
@@ -455,17 +451,69 @@ Func _ConnectOL()
 
     GUICtrlSetData($h_LblStatus, "Connecte")
     GUICtrlSetColor($h_LblStatus, $C_GREEN)
-    GUICtrlSetData($h_LblInbox, $sName & IIf($sEmail <> "", "   <" & $sEmail & ">", ""))
+    GUICtrlSetData($h_LblInbox, IIf($sEmail <> "", $sEmail, $sName))
+
+    ; Enumerer toutes les boites disponibles (stores Outlook)
+    GUICtrlSetData($h_CbxMailbox, "")
+    Local $nStores = 0
+    Local $oStores = $g_oNS.Stores
+    If IsObj($oStores) Then
+        For $oStore In $oStores
+            Local $oTestInbox = $oStore.GetDefaultFolder(6)
+            If @error Or Not IsObj($oTestInbox) Then ContinueLoop
+            Local $sDisp = $oStore.DisplayName
+            If $nStores = 0 Then
+                GUICtrlSetData($h_CbxMailbox, $sDisp, $sDisp)
+            Else
+                GUICtrlSetData($h_CbxMailbox, $sDisp)
+            EndIf
+            $nStores += 1
+        Next
+    EndIf
+    If $nStores = 0 Then
+        GUICtrlSetData($h_CbxMailbox, $sName, $sName)
+    EndIf
+    GUICtrlSetState($h_CbxMailbox, $GUI_ENABLE)
 
     Local $nTotal = $g_oInbox.Items.Count
     _Log("Connexion reussie : " & $sName)
     If $sEmail <> "" Then _Log("Compte : " & $sEmail)
     _Log("Boite de reception : " & $nTotal & " mails au total.")
-    _Log("Definissez la periode et cliquez 'Lancer le Scan'.")
+    _Log("Selectionnez la boite a analyser, definissez la periode et lancez le scan.")
 
     GUICtrlSetState($h_BtnScan, $GUI_ENABLE)
     GUICtrlSetState($h_BtnConnect, $GUI_ENABLE)
     $g_bConn = True
+
+    _PopulateFolderCombo()
+EndFunc
+
+; Retourne la boite de reception correspondant a la selection dans le combo
+Func _GetSelectedInbox()
+    If Not $g_bConn Then Return $g_oInbox
+    Local $sSel = GUICtrlRead($h_CbxMailbox)
+    If $sSel = "" Or $sSel = "(connectez Outlook d'abord)" Then Return $g_oInbox
+    Local $oStores = $g_oNS.Stores
+    If Not IsObj($oStores) Then Return $g_oInbox
+    For $oStore In $oStores
+        If $oStore.DisplayName = $sSel Then
+            Local $oInbox = $oStore.GetDefaultFolder(6)
+            If @error Or Not IsObj($oInbox) Then Return $g_oInbox
+            Return $oInbox
+        EndIf
+    Next
+    Return $g_oInbox
+EndFunc
+
+; Peuple le combo dossier (Page 2) avec les sous-dossiers de la boite selectionnee
+Func _PopulateFolderCombo()
+    If Not $g_bConn Then Return
+    Local $oInbox = _GetSelectedInbox()
+    If Not IsObj($oInbox) Then Return
+    GUICtrlSetData($h_InputName, "")
+    For $oSub In $oInbox.Folders
+        GUICtrlSetData($h_InputName, $oSub.Name)
+    Next
 EndFunc
 
 ; ============================================================
@@ -497,7 +545,6 @@ Func _OnScan()
         Return
     EndIf
 
-    ; Format Outlook Restrict : MM/DD/YYYY HH:MM (format US, independant de la locale)
     Local $sFltD = StringFormat("%02d/%02d/%04d 00:00", $iDM, $iDD, $iDY)
     Local $sFltF = StringFormat("%02d/%02d/%04d 23:59", $iFM, $iFD, $iFY)
 
@@ -509,12 +556,17 @@ Func _OnScan()
     ReDim $g_aConvs[200][$CI_COLS]
     $g_nConvs = 0
 
+    ; Utiliser la boite selectionnee dans le combo
+    Local $oScanInbox = _GetSelectedInbox()
+    Local $sInboxName = GUICtrlRead($h_CbxMailbox)
+
     _Log("────────────────────────────────────────")
     _Log("SCAN  Du " & StringFormat("%02d/%02d/%04d", $iDD, $iDM, $iDY) & " au " & StringFormat("%02d/%02d/%04d", $iFD, $iFM, $iFY))
+    _Log("Boite : " & $sInboxName)
     GUICtrlSetData($h_LblPrg, "Application du filtre Outlook...")
 
     Local $sFilter   = "[ReceivedTime] >= '" & $sFltD & "' AND [ReceivedTime] <= '" & $sFltF & "'"
-    Local $oItems    = $g_oInbox.Items
+    Local $oItems    = $oScanInbox.Items
     $oItems.Sort("[ReceivedTime]", False)
     Local $oFiltered = $oItems.Restrict($sFilter)
 
@@ -591,6 +643,7 @@ Func _OnScan()
 
     GUICtrlSetData($h_PrgScan, 92)
     _PopulateConvLV()
+    _PopulateFolderCombo()
     GUICtrlSetData($h_PrgScan, 100)
     GUICtrlSetData($h_LblPrg, "Termine — " & $g_nMails & " mails  /  " & $g_nConvs & " conversation(s)")
 
@@ -743,7 +796,7 @@ EndFunc
 Func _OnAddGroup()
     Local $sName = StringStripWS(GUICtrlRead($h_InputName), 3)
     If $sName = "" Then
-        MsgBox($MB_ICONWARNING, "Nom manquant", "Saisissez un nom pour le dossier Outlook.")
+        MsgBox($MB_ICONWARNING, "Nom manquant", "Saisissez ou selectionnez un nom de dossier.")
         Return
     EndIf
     If StringRegExp($sName, '[\\/:*?"<>|]') Then
@@ -840,9 +893,11 @@ Func _OnExecute()
     GUICtrlSetData($h_PrgExec, 0)
 
     Local $nOK = 0, $nErr = 0, $nTotal = 0
+    Local $oExecInbox = _GetSelectedInbox()
 
     _LogR("════════════════════════════════")
     _LogR("DEBUT DE L'EXECUTION")
+    _LogR("Boite : " & GUICtrlRead($h_CbxMailbox))
     _LogR("════════════════════════════════")
 
     For $iQ = 0 To $g_nQueue-1
@@ -852,17 +907,18 @@ Func _OnExecute()
         GUICtrlSetData($h_LblPrgExec, "Traitement : " & $fName & "...")
         _LogR("Dossier : " & $fName)
 
+        ; Cherche si le dossier existe deja dans la boite selectionnee
         Local $oFolder = 0
-        For $oSub In $g_oInbox.Folders
+        For $oSub In $oExecInbox.Folders
             If $oSub.Name = $fName Then
                 $oFolder = $oSub
-                _LogR("  Dossier existant utilise.")
+                _LogR("  Dossier existant reutilise.")
                 ExitLoop
             EndIf
         Next
 
         If Not IsObj($oFolder) Then
-            $oFolder = $g_oInbox.Folders.Add($fName)
+            $oFolder = $oExecInbox.Folders.Add($fName)
             If @error Or Not IsObj($oFolder) Then
                 _LogR("  ERREUR : Impossible de creer le dossier !")
                 $g_aQueue[$iQ][$QI_STAT] = -1
@@ -917,6 +973,8 @@ Func _OnExecute()
     If $nErr > 0 Then _LogR("  Erreurs           : " & $nErr)
     _LogR("════════════════════════════════")
     GUICtrlSetData($h_LblPrgExec, "Termine — " & $nTotal & " mails deplaces dans " & $nOK & " dossier(s).")
+
+    _PopulateFolderCombo()
 
     MsgBox(BitOR($MB_OK, $MB_ICONINFORMATION), "Execution terminee", _
         "Resultats :" & @CRLF & @CRLF & _
