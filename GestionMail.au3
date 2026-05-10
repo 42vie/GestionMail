@@ -19,6 +19,7 @@
 #include <ComboConstants.au3>
 #include <WindowsConstants.au3>
 #include <ListViewConstants.au3>
+#include <ComboConstants.au3>
 #include <GuiListView.au3>
 #include <GuiTab.au3>
 #include <Date.au3>
@@ -55,6 +56,9 @@ Global Const $QI_NAME = 0, $QI_IDS = 1, $QI_CNT = 2, $QI_STAT = 3, $QI_COLS = 4
 Global Const $__VMM_WM_NOTIFY = 0x004E
 Global Const $__VMM_NM_CLICK = -2
 Global Const $__VMM_NM_DBLCLK = -3
+
+Global Const $NM_DBLCLK = -3
+Global $g_hPopup = 0
 
 ; ============================================================
 ; GLOBALES
@@ -161,6 +165,7 @@ Func _BuildGUI()
 
     GUIRegisterMsg($__VMM_WM_NOTIFY, "_WM_NOTIFY")
     GUISetState(@SW_SHOW, $g_hWin)
+    GUIRegisterMsg($WM_NOTIFY, "_WM_NOTIFY")
 EndFunc
 
 Func _BuildPage1()
