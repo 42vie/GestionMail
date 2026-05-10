@@ -90,6 +90,9 @@ Global $g_nConvs = 0
 Global $g_aQueue[1][$QI_COLS]
 Global $g_nQueue = 0
 
+Global Const $NM_DBLCLK = -3
+Global $g_hPopup = 0
+
 ; ============================================================
 ;  HANDLES GUI
 ; ============================================================
@@ -158,6 +161,7 @@ Func _BuildGUI()
     GUICtrlCreateTabItem("")
 
     GUISetState(@SW_SHOW, $g_hWin)
+    GUIRegisterMsg($WM_NOTIFY, "_WM_NOTIFY")
 EndFunc
 
 ; ────────────────────────────────────────────────────────────
@@ -165,7 +169,7 @@ Func _BuildPage1()
     GUICtrlCreateTabItem("   Etape 1  —  Configuration & Scan   ")
     Local $x = 20, $y = 90, $w = 980
 
-    ; Card Connexion — hauteur 118 pour inclure le selecteur de boite
+    ; Card Connexion
     _Card($x, $y, $w, 118)
     _Lbl("CONNEXION OUTLOOK", $x+16, $y+14, 300, $C_DIM, 7, 700)
     _Lbl("Statut :", $x+16, $y+36, 70, $C_MUTED, 9, 400)
@@ -181,7 +185,6 @@ Func _BuildPage1()
 
     _Lbl("Boite a analyser :", $x+16, $y+64, 130, $C_MUTED, 9, 400)
 
-    ; ComboBox pour selectionner quelle boite Outlook analyser
     $h_CbxMailbox = GUICtrlCreateCombo("(connectez Outlook d'abord)", $x+150, $y+60, $w-330, 24, BitOR($CBS_DROPDOWNLIST, $WS_VSCROLL))
     GUICtrlSetFont($h_CbxMailbox, 9, 400, 0, "Segoe UI")
     GUICtrlSetState($h_CbxMailbox, $GUI_DISABLE)
@@ -247,7 +250,7 @@ Func _BuildPage2()
     ; -- Gauche : liste conversations
     _Lbl("CONVERSATIONS DETECTEES", $x, $y, 560, $C_DIM, 7, 700)
 
-    $h_LblNbConv = GUICtrlCreateLabel("Lancez d'abord un scan (onglet Etape 1)", $x, $y+16, 580, 18)
+    $h_LblNbConv = GUICtrlCreateLabel("Lancez d'abord un scan (onglet Etape 1)", $x, $y+16, 608, 18)
     GUICtrlSetBkColor($h_LblNbConv, $C_BG)
     GUICtrlSetColor($h_LblNbConv, $C_MUTED)
     GUICtrlSetFont($h_LblNbConv, 9, 400, 2, "Segoe UI")
@@ -270,7 +273,6 @@ Func _BuildPage2()
     ; -- Droite : creation de groupes
     Local $xR = 648, $wR = 352
 
-    ; Card hauteur 220 (etait 192) — corrige le chevauchement bouton/input
     _Card($xR, $y, $wR, 220)
     _Lbl("ASSIGNER A UN DOSSIER", $xR+16, $y+14, 300, $C_DIM, 7, 700)
     _Lbl("1.  Cochez les conversations liees a ce projet",        $xR+16, $y+34, $wR-24, $C_MUTED, 9, 400)
@@ -285,13 +287,12 @@ Func _BuildPage2()
 
     _Lbl("Dossier cible :", $xR+16, $y+136, 120, $C_MUTED, 9, 400)
 
-    ; ComboBox editable : liste les dossiers existants + permet de saisir un nouveau nom
     $h_InputName = GUICtrlCreateCombo("", $xR+16, $y+153, $wR-32, 24, BitOR($CBS_DROPDOWN, $CBS_AUTOHSCROLL, $WS_VSCROLL))
     GUICtrlSetFont($h_InputName, 9, 400, 0, "Segoe UI")
     GUICtrlSetColor($h_InputName, $C_TEXT)
 
-    ; Bouton place apres le combo (etait y+156 et chevauchait l'input a y+150)
-    $h_BtnAdd = GUICtrlCreateButton("+ Ajouter a la file", $xR+16, $y+185, 155, 28)
+    ; BS_DEFPUSHBUTTON donne le relief bleu accent sur Windows 10/11
+    $h_BtnAdd = GUICtrlCreateButton("+ Ajouter a la file", $xR+16, $y+185, 155, 28, $BS_DEFPUSHBUTTON)
     GUICtrlSetFont($h_BtnAdd, 9, 700, 0, "Segoe UI")
     GUICtrlSetOnEvent($h_BtnAdd, "_OnAddGroup")
 
@@ -315,7 +316,7 @@ Func _BuildPage2()
     GUICtrlSetFont($h_BtnDel, 9, 400, 0, "Segoe UI")
     GUICtrlSetOnEvent($h_BtnDel, "_OnDelGroup")
 
-    $h_BtnGoExec = GUICtrlCreateButton("Executer  >>", $xR+$wR-136, $y2+192, 124, 30)
+    $h_BtnGoExec = GUICtrlCreateButton("Executer  >>", $xR+$wR-136, $y2+192, 124, 30, $BS_DEFPUSHBUTTON)
     GUICtrlSetFont($h_BtnGoExec, 10, 700, 0, "Segoe UI")
     GUICtrlSetOnEvent($h_BtnGoExec, "_OnGoExec")
     GUICtrlSetState($h_BtnGoExec, $GUI_DISABLE)
@@ -352,7 +353,7 @@ Func _BuildPage3()
     GUICtrlSetColor($h_EditRes, $C_MUTED)
     GUICtrlSetFont($h_EditRes, 8, 400, 0, "Consolas")
 
-    $h_BtnExec = GUICtrlCreateButton("EXECUTER", $x+$w-316, $y2+318, 148, 38)
+    $h_BtnExec = GUICtrlCreateButton("EXECUTER", $x+$w-316, $y2+318, 148, 38, $BS_DEFPUSHBUTTON)
     GUICtrlSetFont($h_BtnExec, 11, 700, 0, "Segoe UI")
     GUICtrlSetOnEvent($h_BtnExec, "_OnExecute")
     GUICtrlSetState($h_BtnExec, $GUI_DISABLE)
@@ -454,7 +455,7 @@ Func _ConnectOL()
     GUICtrlSetColor($h_LblStatus, $C_GREEN)
     GUICtrlSetData($h_LblInbox, IIf($sEmail <> "", $sEmail, $sName))
 
-    ; Enumerer toutes les boites disponibles (stores Outlook)
+    ; Enumerer toutes les boites disponibles
     GUICtrlSetData($h_CbxMailbox, "")
     Local $nStores = 0
     Local $oStores = $g_oNS.Stores
@@ -489,7 +490,6 @@ Func _ConnectOL()
     _PopulateFolderCombo()
 EndFunc
 
-; Retourne la boite de reception correspondant a la selection dans le combo
 Func _GetSelectedInbox()
     If Not $g_bConn Then Return $g_oInbox
     Local $sSel = GUICtrlRead($h_CbxMailbox)
@@ -506,7 +506,6 @@ Func _GetSelectedInbox()
     Return $g_oInbox
 EndFunc
 
-; Peuple le combo dossier (Page 2) avec les sous-dossiers de la boite selectionnee
 Func _PopulateFolderCombo()
     If Not $g_bConn Then Return
     Local $oInbox = _GetSelectedInbox()
@@ -546,9 +545,6 @@ Func _OnScan()
         Return
     EndIf
 
-    Local $sFltD = StringFormat("%02d/%02d/%04d 00:00", $iDM, $iDD, $iDY)
-    Local $sFltF = StringFormat("%02d/%02d/%04d 23:59", $iFM, $iFD, $iFY)
-
     GUICtrlSetState($h_BtnScan, $GUI_DISABLE)
     GUICtrlSetData($h_PrgScan, 0)
 
@@ -557,7 +553,6 @@ Func _OnScan()
     ReDim $g_aConvs[200][$CI_COLS]
     $g_nConvs = 0
 
-    ; Utiliser la boite selectionnee dans le combo
     Local $oScanInbox = _GetSelectedInbox()
     Local $sInboxName = GUICtrlRead($h_CbxMailbox)
 
@@ -566,18 +561,31 @@ Func _OnScan()
     _Log("Boite : " & $sInboxName)
     GUICtrlSetData($h_LblPrg, "Application du filtre Outlook...")
 
-    Local $sFilter   = "[ReceivedTime] >= '" & $sFltD & "' AND [ReceivedTime] <= '" & $sFltF & "'"
-    Local $oItems    = $oScanInbox.Items
+    Local $oItems = $oScanInbox.Items
     $oItems.Sort("[ReceivedTime]", False)
+
+    ; Filtre DASL (independant de la locale) avec marge d'un jour pour le fuseau
+    Local $sD_in    = StringFormat("%04d/%02d/%02d", $iDY, $iDM, $iDD)
+    Local $sF_in    = StringFormat("%04d/%02d/%02d", $iFY, $iFM, $iFD)
+    Local $sDASL_D  = StringReplace(_DateAdd("D", -1, $sD_in), "/", "-") & "T00:00:00"
+    Local $sDASL_F  = StringReplace(_DateAdd("D",  1, $sF_in), "/", "-") & "T23:59:59"
+    Local $sFilter  = "@SQL=""""urn:schemas:httpmail:datereceived"""" >= '" & $sDASL_D & "' AND """"urn:schemas:httpmail:datereceived"""" <= '" & $sDASL_F & "'"
     Local $oFiltered = $oItems.Restrict($sFilter)
 
     If @error Or Not IsObj($oFiltered) Then
-        _Log("Filtre non applique, lecture complete...")
-        $oFiltered = $oItems
+        _Log("Filtre DASL indisponible, tentative JET...")
+        Local $sFltD = StringFormat("%02d/%02d/%04d 00:00", $iDM, $iDD, $iDY)
+        Local $sFltF = StringFormat("%02d/%02d/%04d 23:59", $iFM, $iFD, $iFY)
+        $sFilter   = "[ReceivedTime] >= '" & $sFltD & "' AND [ReceivedTime] <= '" & $sFltF & "'"
+        $oFiltered = $oItems.Restrict($sFilter)
+        If @error Or Not IsObj($oFiltered) Then
+            _Log("Filtres non appliques, lecture complete...")
+            $oFiltered = $oItems
+        EndIf
     EndIf
 
     Local $nTotal = $oFiltered.Count
-    _Log("Mails dans la periode : " & $nTotal)
+    _Log("Mails dans la periode (pre-filtre) : " & $nTotal)
     GUICtrlSetData($h_PrgScan, 10)
 
     If $nTotal = 0 Then
@@ -615,6 +623,10 @@ Func _OnScan()
         Local $bReply = _IsReply($sSubj)
 
         Local $sDateISO = _ParseDate($oItem.ReceivedTime)
+        ; Verification exacte de la periode (compense le decalage UTC du filtre DASL)
+        If $sDateISO <> "00000000" Then
+            If $sDateISO < $sISO_D Or $sDateISO > $sISO_F Then ContinueLoop
+        EndIf
         Local $sDateFmt = StringMid($sDateISO, 7, 2) & "/" & StringMid($sDateISO, 5, 2) & "/" & StringLeft($sDateISO, 4)
 
         If $g_nMails >= UBound($g_aMails)-1 Then ReDim $g_aMails[$g_nMails+200][$MI_COLS]
@@ -637,7 +649,7 @@ Func _OnScan()
         EndIf
     Next
 
-    _Log("Mails lus : " & $g_nMails)
+    _Log("Mails dans la periode (verifies) : " & $g_nMails)
     GUICtrlSetData($h_PrgScan, 72)
     GUICtrlSetData($h_LblPrg, "Reconstitution des conversations...")
     _BuildConvs()
@@ -757,7 +769,7 @@ EndFunc
 
 Func _PopulateConvLV()
     _GUICtrlListView_DeleteAllItems($h_LVH)
-    GUICtrlSetData($h_LblNbConv, $g_nConvs & " conversation(s) detectee(s) dans la periode")
+    GUICtrlSetData($h_LblNbConv, $g_nConvs & " conversation(s) detectee(s)  —  double-clic pour voir les details")
     GUICtrlSetColor($h_LblNbConv, $C_TEXT)
     GUICtrlSetFont($h_LblNbConv, 9, 700, 0, "Segoe UI")
 
@@ -776,6 +788,119 @@ Func _PopulateConvLV()
         EndIf
         GUICtrlCreateListViewItem($topic & "|" & $g_aConvs[$i][$CI_CNT] & "|" & $pj & "|" & $re & "|" & $parts & "|" & $per, $h_LV_Convs)
     Next
+EndFunc
+
+; ============================================================
+;  DOUBLE-CLIC LISTVIEW — DETAILS CONVERSATION
+; ============================================================
+Func _WM_NOTIFY($hWnd, $iMsg, $wParam, $lParam)
+    #forceref $hWnd, $iMsg, $wParam
+    Local $tNMHDR = DllStructCreate("hwnd hWndFrom;uint_ptr IDFrom;int Code", $lParam)
+    If @error Then Return $GUI_RUNDEFMSG
+    Local $hFrom = DllStructGetData($tNMHDR, "hWndFrom")
+    Local $iCode = DllStructGetData($tNMHDR, "Code")
+    If $hFrom = $h_LVH And $iCode = $NM_DBLCLK Then _ShowConvDetails()
+    Return $GUI_RUNDEFMSG
+EndFunc
+
+Func _ShowConvDetails()
+    If Not IsHWnd($h_LVH) Then Return
+    Local $iSel = _GUICtrlListView_GetSelectedIndices($h_LVH)
+    If $iSel = "" Then Return
+    Local $idx = Number($iSel)
+    If $idx < 0 Or $idx >= $g_nConvs Then Return
+
+    If $g_hPopup <> 0 And WinExists($g_hPopup) Then
+        GUIDelete($g_hPopup)
+        $g_hPopup = 0
+    EndIf
+
+    Local $topic = $g_aConvs[$idx][$CI_TOPIC]
+    Local $nCnt  = $g_aConvs[$idx][$CI_CNT]
+    Local $parts = $g_aConvs[$idx][$CI_PART]
+    Local $dMin  = $g_aConvs[$idx][$CI_DMIN]
+    Local $dMax  = $g_aConvs[$idx][$CI_DMAX]
+    Local $bAtt  = $g_aConvs[$idx][$CI_ATT]
+    Local $bRep  = $g_aConvs[$idx][$CI_REP]
+    Local $sPer  = IIf($dMin = $dMax, $dMin, $dMin & "  au  " & $dMax)
+
+    $g_hPopup = GUICreate("Details de la conversation", 560, 320, -1, -1, _
+        BitOR($WS_POPUP, $WS_CAPTION, $WS_SYSMENU), $WS_EX_TOOLWINDOW, $g_hWin)
+    GUISetBkColor($C_WHITE, $g_hPopup)
+    GUISetOnEvent($GUI_EVENT_CLOSE, "_OnPopupClose", $g_hPopup)
+
+    ; En-tete bleu
+    GUICtrlCreateLabel("", 0, 0, 560, 50)
+    GUICtrlSetBkColor(-1, $C_ACCENT)
+    GUICtrlCreateLabel("Detail conversation", 16, 8, 530, 20)
+    GUICtrlSetBkColor(-1, $C_ACCENT)
+    GUICtrlSetColor(-1, $C_WHITE)
+    GUICtrlSetFont(-1, 11, 700, 0, "Segoe UI")
+    Local $sTopicShort = IIf(StringLen($topic) > 62, StringLeft($topic, 59) & "...", $topic)
+    GUICtrlCreateLabel($sTopicShort, 16, 30, 530, 16)
+    GUICtrlSetBkColor(-1, $C_ACCENT)
+    GUICtrlSetColor(-1, 0xC8D8F8)
+    GUICtrlSetFont(-1, 8, 400, 0, "Segoe UI")
+
+    ; Champs
+    Local $yf = 66
+    GUICtrlCreateLabel("Sujet :", 16, $yf, 100, 16)
+    GUICtrlSetColor(-1, $C_MUTED)
+    GUICtrlSetFont(-1, 9, 400, 0, "Segoe UI")
+    GUICtrlCreateLabel($topic, 120, $yf, 424, 16)
+    GUICtrlSetColor(-1, $C_TEXT)
+    GUICtrlSetFont(-1, 9, 700, 0, "Segoe UI")
+
+    $yf += 26
+    GUICtrlCreateLabel("Nb mails :", 16, $yf, 100, 16)
+    GUICtrlSetColor(-1, $C_MUTED)
+    GUICtrlSetFont(-1, 9, 400, 0, "Segoe UI")
+    GUICtrlCreateLabel($nCnt, 120, $yf, 100, 16)
+    GUICtrlSetColor(-1, $C_TEXT)
+    GUICtrlSetFont(-1, 9, 700, 0, "Segoe UI")
+    GUICtrlCreateLabel("Periode :", 280, $yf, 80, 16)
+    GUICtrlSetColor(-1, $C_MUTED)
+    GUICtrlSetFont(-1, 9, 400, 0, "Segoe UI")
+    GUICtrlCreateLabel($sPer, 364, $yf, 180, 16)
+    GUICtrlSetColor(-1, $C_TEXT)
+    GUICtrlSetFont(-1, 9, 700, 0, "Segoe UI")
+
+    $yf += 26
+    GUICtrlCreateLabel("Indicateurs :", 16, $yf, 100, 16)
+    GUICtrlSetColor(-1, $C_MUTED)
+    GUICtrlSetFont(-1, 9, 400, 0, "Segoe UI")
+    Local $sIndic = ""
+    If $bAtt Then $sIndic &= "Pieces jointes"
+    If $bRep Then $sIndic &= IIf($sIndic <> "", "   Reponses", "Reponses")
+    If $sIndic = "" Then $sIndic = "(aucun)"
+    GUICtrlCreateLabel($sIndic, 120, $yf, 424, 16)
+    GUICtrlSetColor(-1, IIf($sIndic = "(aucun)", $C_DIM, $C_ACCENT))
+    GUICtrlSetFont(-1, 9, 700, 0, "Segoe UI")
+
+    $yf += 30
+    GUICtrlCreateLabel("Participants :", 16, $yf, 524, 16)
+    GUICtrlSetColor(-1, $C_MUTED)
+    GUICtrlSetFont(-1, 9, 400, 0, "Segoe UI")
+
+    $yf += 20
+    GUICtrlCreateEdit($parts, 16, $yf, 528, 80, BitOR($ES_READONLY, $ES_MULTILINE, $WS_VSCROLL, $ES_AUTOVSCROLL))
+    GUICtrlSetFont(-1, 9, 400, 0, "Segoe UI")
+    GUICtrlSetColor(-1, $C_TEXT)
+    GUICtrlSetBkColor(-1, $C_BG)
+
+    $yf += 94
+    Local $hBtnFermer = GUICtrlCreateButton("Fermer", 220, $yf, 120, 30, $BS_DEFPUSHBUTTON)
+    GUICtrlSetFont($hBtnFermer, 9, 700, 0, "Segoe UI")
+    GUICtrlSetOnEvent($hBtnFermer, "_OnPopupClose")
+
+    GUISetState(@SW_SHOW, $g_hPopup)
+EndFunc
+
+Func _OnPopupClose()
+    If $g_hPopup <> 0 Then
+        GUIDelete($g_hPopup)
+        $g_hPopup = 0
+    EndIf
 EndFunc
 
 ; ============================================================
@@ -908,7 +1033,6 @@ Func _OnExecute()
         GUICtrlSetData($h_LblPrgExec, "Traitement : " & $fName & "...")
         _LogR("Dossier : " & $fName)
 
-        ; Cherche si le dossier existe deja dans la boite selectionnee
         Local $oFolder = 0
         For $oSub In $oExecInbox.Folders
             If $oSub.Name = $fName Then
