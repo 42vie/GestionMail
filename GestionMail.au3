@@ -8,6 +8,7 @@
 #include <GUIConstantsEx.au3>
 #include <WindowsConstants.au3>
 #include <ListViewConstants.au3>
+#include <ComboConstants.au3>
 #include <GuiListView.au3>
 #include <GuiDateTimePicker.au3>
 #include <GuiTab.au3>
